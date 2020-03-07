@@ -18,7 +18,6 @@ class Case:
     output_directory: str
     dicom_files: List[str]
     report_file: str
-    report_text: str = ''
     labels: Dict[str, bool] = field(default_factory=dict)
 
 
@@ -35,28 +34,25 @@ def main():
 
     parser.add_argument('--labels', help='generate labels for cases (comprehend must have already been run)', action='store_true')
 
-    parser.add_argument('--images', type=bool, help='convert dicoms to images', default=False)
-    parser.add_argument('--width', type=int, help='output width', default=256)
-    parser.add_argument('--height', type=int, help='output height', default=256)
+    parser.add_argument('--images', help='convert dicoms to images', action='store_true')
+    parser.add_argument('--width', type=int, help='output width', default=500)
+    parser.add_argument('--height', type=int, help='output height', default=500)
 
     args = parser.parse_args()
-
-    if args.entities:
-        prepare_entities_csv(args)
 
     cases = parse_source_folders(args)
 
     if args.comprehend:
         detect_entities_for_cases(cases, args)
 
+    if args.entities:
+        collect_entities_for_cases(cases, args)
+
     if args.labels:
         generate_labels_for_cases(cases, args)
 
-    for case in cases:
-        if args.images:
-            convert_dicoms_for_case(case, args)
-        if args.entities:
-            collect_entities_for_case(case, args)
+    if args.images:
+        convert_dicoms_for_cases(cases, args)
 
 def parse_source_folders(args) -> List[Case]:
     cases = []
@@ -76,6 +72,10 @@ def parse_source_folders(args) -> List[Case]:
         cases.append(Case(id=case_id, report_file=report_file, dicom_files=dicom_files, output_directory=get_case_output_directory(case_id, args)))
 
     return cases
+
+def convert_dicoms_for_cases(cases: List[Case], args):
+    for case in cases:
+        convert_dicoms_for_case(case, args)
 
 def convert_dicoms_for_case(case: Case, args):
     for dicom_file in case.dicom_files:
@@ -131,6 +131,11 @@ def prepare_entities_csv(args):
 
     entities_csv_file.write(','.join(header_columns) + '\n')
     entities_csv_file.close()
+
+def collect_entities_for_cases(cases: List[Case], args):
+    prepare_entities_csv(args)
+    for case in cases:
+        collect_entities_for_case(case, args)
 
 def collect_entities_for_case(case: Case, args):
     entities = get_entities_for_case(case, args)
