@@ -2,8 +2,8 @@ import argparse
 import csv
 import json
 import os
-from dataclasses import dataclass
-from typing import List, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
 
 import boto3
 
@@ -12,12 +12,15 @@ import matplotlib.pyplot as plt
 import PIL
 import pydicom as dicom
 
-
 @dataclass
 class Case:
     id: str
+    output_directory: str
     dicom_files: List[str]
     report_file: str
+    report_text: str = ''
+    labels: Dict[str, bool] = field(default_factory=dict)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -30,6 +33,8 @@ def main():
 
     parser.add_argument('--entities', help='generate csv file with found entities', action='store_true')
 
+    parser.add_argument('--labels', help='generate labels for cases (comprehend must have already been run)', action='store_true')
+
     parser.add_argument('--images', type=bool, help='convert dicoms to images', default=False)
     parser.add_argument('--width', type=int, help='output width', default=256)
     parser.add_argument('--height', type=int, help='output height', default=256)
@@ -39,23 +44,28 @@ def main():
     if args.entities:
         prepare_entities_csv(args)
 
-    cases = parse_source_folders(args.source_folder)
+    cases = parse_source_folders(args)
+
+    if args.comprehend:
+        detect_entities_for_cases(cases, args)
+
+    if args.labels:
+        generate_labels_for_cases(cases, args)
+
     for case in cases:
         if args.images:
             convert_dicoms_for_case(case, args)
-        if args.comprehend:
-            detect_entities_for_case(case, args)
         if args.entities:
             collect_entities_for_case(case, args)
 
-def parse_source_folders(source_folder: str) -> List[Case]:
+def parse_source_folders(args) -> List[Case]:
     cases = []
-    case_ids = os.listdir(source_folder)
+    case_ids = os.listdir(args.source_folder)
 
     for case_id in case_ids:
         dicom_files = []
         report_file = ""
-        case_folder = os.path.join(source_folder, case_id)
+        case_folder = os.path.join(args.source_folder, case_id)
         for file in os.listdir(case_folder):
             full_file_path = os.path.join(case_folder, file)
             if file.endswith('.txt'):
@@ -63,23 +73,19 @@ def parse_source_folders(source_folder: str) -> List[Case]:
             elif file.endswith('.dcm'):
                 dicom_files.append(full_file_path)
 
-        cases.append(Case(id=case_id, report_file=report_file, dicom_files=dicom_files))
+        cases.append(Case(id=case_id, report_file=report_file, dicom_files=dicom_files, output_directory=get_case_output_directory(case_id, args)))
 
     return cases
 
-def create_output_folder_for_case(case: Case, args):
-    case_directory = get_case_output_directory(case, args)
+def convert_dicoms_for_case(case: Case, args):
+    for dicom_file in case.dicom_files:
+        convert_dicom(dicom_file, output_path=case.output_directory, output_dimensions=(args.width, args.height))
+
+def get_case_output_directory(id: str, args):
+    case_directory = os.path.join(args.output, id)
     if not os.path.exists(case_directory):
         os.makedirs(case_directory)
-
-def convert_dicoms_for_case(case: Case, args):
-    create_output_folder_for_case(case, args)
-    for dicom_file in case.dicom_files:
-        output_path = get_case_output_directory(case, args)
-        convert_dicom(dicom_file, output_path=output_path, output_dimensions=(args.width, args.height))
-
-def get_case_output_directory(case: Case, args):
-    return os.path.join(args.output, case.id)
+    return case_directory
 
 def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[int]):
     filename = os.path.basename(dicom_file)
@@ -92,9 +98,11 @@ def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[in
 
 def get_comprehend_medical_filename(case: Case, args):
     COMPREHEND_MEDICAL_OUTPUT_FILENAME = 'comprehendmedical.json'
-    
-    output_directory = get_case_output_directory(case, args)
-    return os.path.join(output_directory, COMPREHEND_MEDICAL_OUTPUT_FILENAME)
+    return os.path.join(case.output_directory, COMPREHEND_MEDICAL_OUTPUT_FILENAME)
+
+def detect_entities_for_cases(cases: List[Case], args):
+    for case in cases:
+        detect_entities_for_case(case, args)
 
 def detect_entities_for_case(case: Case, args):
     client = boto3.client(service_name='comprehendmedical')
@@ -125,9 +133,7 @@ def prepare_entities_csv(args):
     entities_csv_file.close()
 
 def collect_entities_for_case(case: Case, args):
-    comprehend_medical_filename = get_comprehend_medical_filename(case, args)
-    result = json.loads(read_file(comprehend_medical_filename))
-    entities = result['Entities']
+    entities = get_entities_for_case(case, args)
     text_columns = ENTITIES_COLUMNS
     lines = []
     for entity in entities:
@@ -145,6 +151,62 @@ def collect_entities_for_case(case: Case, args):
     entities_csv_file.writelines(lines)
     entities_csv_file.close()
 
+def get_entities_for_case(case: Case, args):
+    comprehend_medical_filename = get_comprehend_medical_filename(case, args)
+    result = json.loads(read_file(comprehend_medical_filename))
+    return result['Entities']
+
+def generate_labels_for_cases(cases: List[Case], args):
+    for case in cases:
+        generate_labels_for_case(case, args)
+    
+    write_labels_for_all_cases(cases, args.output)
+
+def generate_labels_for_case(case: Case, args):
+    entities = get_entities_for_case(case, args)
+
+    medical_condition_entities = list(filter(is_medical_condition, entities))
+
+    for entity in medical_condition_entities:
+        diagnosis = entity['Text']
+        case.labels[diagnosis] = is_positive_diagnosis(entity)
+    
+    write_labels_for_case(case)
+
+def is_medical_condition(entity):
+    return entity['Category'] == 'MEDICAL_CONDITION'
+
+def is_positive_diagnosis(entity):
+    traits = entity['Traits']
+    for trait in traits:
+        if trait['Name'] == 'NEGATION':
+            return False
+
+    return True
+
+def write_labels_for_case(case: Case):
+    write_labels_for_all_cases([case], case.output_directory)
+
+def write_labels_for_all_cases(cases: List[Case], output_folder: str):
+    possible_diagnoses_set = set()
+    for case in cases:
+        for label in case.labels:
+            possible_diagnoses_set.add(label)
+    possible_diagnoses = list(possible_diagnoses_set)
+    
+    LABELS_FILENAME = 'labels.csv'
+    labels_csv_filename = os.path.join(output_folder, LABELS_FILENAME)
+    with open(labels_csv_filename, 'w') as labels_csv_file:
+        writer = csv.writer(labels_csv_file)
+        writer.writerow(['ID'] + possible_diagnoses)
+
+        for case in cases:
+            row = [case.id]
+            for diagnosis in possible_diagnoses:
+                exists = case.labels.get(diagnosis, False)
+                row.append(exists)
+
+            writer.writerow(row)
 
 def read_file(filename: str):
     file = open(filename, 'r')
