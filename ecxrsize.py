@@ -27,6 +27,7 @@ def main():
     )
     parser.add_argument('source_folder', help='folder with cases')
     parser.add_argument('--output', help='output', default='output')
+    parser.add_argument('--ext', help='output', default='png')
 
     parser.add_argument('--comprehend', help='run Comprehend Medical on reports', action='store_true')
 
@@ -79,7 +80,7 @@ def convert_dicoms_for_cases(cases: List[Case], args):
 
 def convert_dicoms_for_case(case: Case, args):
     for dicom_file in case.dicom_files:
-        convert_dicom(dicom_file, output_path=case.output_directory, output_dimensions=(args.width, args.height))
+        convert_dicom(dicom_file, output_path=case.output_directory, output_dimensions=(args.width, args.height), ext=args.ext)
 
 def get_case_output_directory(id: str, args):
     case_directory = os.path.join(args.output, id)
@@ -87,11 +88,11 @@ def get_case_output_directory(id: str, args):
         os.makedirs(case_directory)
     return case_directory
 
-def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[int]):
+def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[int], ext: str):
     filename = os.path.basename(dicom_file)
     ds = dicom.dcmread(dicom_file)
     pixel_array_numpy = ds.pixel_array
-    image_path = filename.replace('dcm', 'jpg')
+    image_path = filename.replace('dcm', ext)
     full_image_path = os.path.join(output_path, image_path)
     resized_img = cv2.resize(pixel_array_numpy, output_dimensions)
     cv2.imwrite(full_image_path, resized_img)
