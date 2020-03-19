@@ -36,7 +36,7 @@ def main():
     parser.add_argument('source_folder', help='folder with cases')
     parser.add_argument('--output', help='output', default='output')
 
-    parser.add_argument('--p', help='process pool size', default=2)
+    parser.add_argument('--p', help='process pool size', type=int, default=2)
 
     parser.add_argument('--csv', help='generate master csv', action='store_true')
     parser.add_argument('--merge', help='merge label csv(s)', action='store_true')
