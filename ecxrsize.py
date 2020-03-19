@@ -2,6 +2,7 @@ import argparse
 import csv
 import json
 import os
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -78,8 +79,18 @@ def parse_source_folders(args) -> List[Case]:
     return cases
 
 def convert_dicoms_for_cases(cases: List[Case], args):
+    count = 0
+
+    image_start_time = datetime.now()
+
     for case in cases:
+        case_start_time = datetime.now()
         convert_dicoms_for_case(case, args)
+        count += 1
+
+        print(f'Converting {case.id} took {datetime.now() - case_start_time} {count} / {len(cases)} cases complete')
+    
+    print(f'Converting {len(cases)} cases took {datetime.now() - image_start_time}')
 
 def convert_dicoms_for_case(case: Case, args):
     for dicom_file in case.dicom_files:
