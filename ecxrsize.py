@@ -18,7 +18,7 @@ class Case:
     id: str
     output_directory: str
     dicom_files: List[str]
-    report_file: str
+    report_text: str
     labels: Dict[str, bool] = field(default_factory=dict)
 
 
@@ -28,7 +28,8 @@ def main():
     )
     parser.add_argument('source_folder', help='folder with cases')
     parser.add_argument('--output', help='output', default='output')
-    parser.add_argument('--ext', help='output', default='png')
+
+    parser.add_argument('--csv', help='generate master csv', action='store_true')
 
     parser.add_argument('--comprehend', help='run Comprehend Medical on reports', action='store_true')
 
@@ -37,6 +38,7 @@ def main():
     parser.add_argument('--labels', help='generate labels for cases (comprehend must have already been run)', action='store_true')
 
     parser.add_argument('--images', help='convert dicoms to images', action='store_true')
+    parser.add_argument('--ext', help='image file extension', default='png')
     parser.add_argument('--width', type=int, help='output width', default=500)
     parser.add_argument('--height', type=int, help='output height', default=500)
 
@@ -55,6 +57,9 @@ def main():
 
     if args.images:
         convert_dicoms_for_cases(cases, args)
+    
+    if args.csv:
+        write_cases_csv(cases, args)
 
 def parse_source_folders(args) -> List[Case]:
     cases = []
@@ -62,7 +67,6 @@ def parse_source_folders(args) -> List[Case]:
 
     for case_id in case_ids:
         dicom_files = []
-        report_file = ""
         case_folder = os.path.join(args.source_folder, case_id)
         if os.path.isdir(case_folder) is False:
             continue
@@ -70,11 +74,18 @@ def parse_source_folders(args) -> List[Case]:
         for file in os.listdir(case_folder):
             full_file_path = os.path.join(case_folder, file)
             if file.endswith('.txt'):
-                report_file = full_file_path
+                report_text = read_file(full_file_path)
             elif file.endswith('.dcm'):
                 dicom_files.append(full_file_path)
 
-        cases.append(Case(id=case_id, report_file=report_file, dicom_files=dicom_files, output_directory=get_case_output_directory(case_id, args)))
+        cases.append(
+            Case(
+                id=case_id,
+                report_text=report_text,
+                dicom_files=dicom_files,
+                output_directory=get_case_output_directory(case_id, args)
+            )
+        )
 
     return cases
 
@@ -132,8 +143,7 @@ def detect_entities_for_cases(cases: List[Case], args):
 def detect_entities_for_case(case: Case, args):
     client = boto3.client(service_name='comprehendmedical')
 
-    report_text = read_file(case.report_file)
-    result = client.detect_entities(Text=report_text)
+    result = client.detect_entities(Text=case.report_text)
 
     output_filename = get_comprehend_medical_filename(case, args)
     file = open(output_filename, 'w')
@@ -243,6 +253,30 @@ def read_file(filename: str):
     text = file.read()
     file.close()
     return text
+
+def write_cases_csv(cases: Case, args):
+    csv_filename = os.path.join(args.output, 'master.csv')
+    file_already_exists = os.path.exists(csv_filename)
+
+
+    
+    with open(csv_filename, 'a') as labels_csv_file:
+        writer = csv.writer(labels_csv_file)
+        if file_already_exists is False:
+            writer.writerow([
+                "ID",
+                "Report",
+                "Source Folder",
+                "Output Folder"
+            ])
+        for case in cases:
+            writer.writerow([
+                case.id,
+                case.report_text,
+                args.source_folder,
+                case.output_directory
+            ])
+            
 
 if __name__ == '__main__':
     main()
