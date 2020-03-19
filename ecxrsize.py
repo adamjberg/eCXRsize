@@ -7,11 +7,13 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 import boto3
+import numpy as np
 import pandas as pd
 
 import cv2
 import matplotlib.pyplot as plt
 import PIL
+import png
 import pydicom as dicom
 
 
@@ -122,10 +124,19 @@ def get_case_output_directory(id: str, args):
 def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[int], ext: str):
     filename = os.path.basename(dicom_file)
     ds = dicom.dcmread(dicom_file)
-    pixel_array_numpy = ds.pixel_array
     image_path = filename.replace('dcm', ext)
     full_image_path = os.path.join(output_path, image_path)
-    resized_img = cv2.resize(pixel_array_numpy, output_dimensions)
+
+    # Convert to float to avoid overflow or underflow losses.
+    image_2d = ds.pixel_array.astype(float)
+
+    # Rescaling grey scale between 0-255
+    image_2d_scaled = (1 -(np.maximum(image_2d,0) / image_2d.max())) * 255.0
+
+    # Convert to uint
+    image_2d_scaled = np.uint8(image_2d_scaled)
+
+    resized_img = cv2.resize(image_2d_scaled, output_dimensions)
     cv2.imwrite(full_image_path, resized_img)
 
 def get_comprehend_medical_filename(case: Case, args):
