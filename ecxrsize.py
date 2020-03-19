@@ -1,10 +1,13 @@
 import argparse
 import csv
+import itertools
 import json
 import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import partial
+from multiprocessing import Pool
 from typing import Dict, List, Optional, Tuple
 
 import boto3
@@ -32,6 +35,8 @@ def main():
     )
     parser.add_argument('source_folder', help='folder with cases')
     parser.add_argument('--output', help='output', default='output')
+
+    parser.add_argument('--p', help='process pool size', default=2)
 
     parser.add_argument('--csv', help='generate master csv', action='store_true')
     parser.add_argument('--merge', help='merge label csv(s)', action='store_true')
@@ -98,22 +103,17 @@ def parse_source_folders(args) -> List[Case]:
     return cases
 
 def convert_dicoms_for_cases(cases: List[Case], args):
-    count = 0
-
     image_start_time = datetime.now()
 
-    for case in cases:
-        case_start_time = datetime.now()
-        convert_dicoms_for_case(case, args)
-        count += 1
+    with Pool(args.p) as pool:
+        pool.map(partial(convert_dicoms_for_case, args=args), cases)
 
-        print(f'Converting {case.id} took {datetime.now() - case_start_time} {count} / {len(cases)} cases complete')
-    
     print(f'Converting {len(cases)} cases took {datetime.now() - image_start_time}')
 
 def convert_dicoms_for_case(case: Case, args):
     for dicom_file in case.dicom_files:
         convert_dicom(dicom_file, output_path=case.output_directory, output_dimensions=(args.width, args.height), ext=args.ext)
+    print(f'Converted {case.id}')
 
 def get_case_output_directory(id: str, args):
     case_directory = os.path.join(args.output, id)
