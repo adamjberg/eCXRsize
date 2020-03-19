@@ -13,7 +13,6 @@ import pandas as pd
 import cv2
 import matplotlib.pyplot as plt
 import PIL
-import png
 import pydicom as dicom
 
 
@@ -43,7 +42,7 @@ def main():
     parser.add_argument('--labels', help='generate labels for cases (comprehend must have already been run)', action='store_true')
 
     parser.add_argument('--images', help='convert dicoms to images', action='store_true')
-    parser.add_argument('--ext', help='image file extension', default='png')
+    parser.add_argument('--ext', help='image file extension', default='jpg')
     parser.add_argument('--width', type=int, help='output width', default=500)
     parser.add_argument('--height', type=int, help='output height', default=500)
 
