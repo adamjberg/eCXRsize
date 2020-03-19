@@ -116,8 +116,18 @@ def get_comprehend_medical_filename(case: Case, args):
     return os.path.join(case.output_directory, COMPREHEND_MEDICAL_OUTPUT_FILENAME)
 
 def detect_entities_for_cases(cases: List[Case], args):
+    count = 0
+
+    image_start_time = datetime.now()
+
     for case in cases:
+        case_start_time = datetime.now()
         detect_entities_for_case(case, args)
+        count += 1
+
+        print(f'Detecting Entities for {case.id} took {datetime.now() - case_start_time} {count} / {len(cases)} cases complete')
+    
+    print(f'Detecting Entities {len(cases)} cases took {datetime.now() - image_start_time}')
 
 def detect_entities_for_case(case: Case, args):
     client = boto3.client(service_name='comprehendmedical')
