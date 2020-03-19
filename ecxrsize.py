@@ -146,16 +146,12 @@ def get_comprehend_medical_filename(case: Case, args):
 def detect_entities_for_cases(cases: List[Case], args):
     count = 0
 
-    image_start_time = datetime.now()
+    start_time = datetime.now()
 
-    for case in cases:
-        case_start_time = datetime.now()
-        detect_entities_for_case(case, args)
-        count += 1
-
-        print(f'Detecting Entities for {case.id} took {datetime.now() - case_start_time} {count} / {len(cases)} cases complete')
+    with Pool(args.p) as pool:
+        pool.map(partial(detect_entities_for_case, args=args), cases)
     
-    print(f'Detecting Entities {len(cases)} cases took {datetime.now() - image_start_time}')
+    print(f'Detecting Entities {len(cases)} cases took {datetime.now() - start_time}')
 
 def detect_entities_for_case(case: Case, args):
     client = boto3.client(service_name='comprehendmedical')
@@ -169,6 +165,8 @@ def detect_entities_for_case(case: Case, args):
     except:
         print(f'Failed to detect_entities for {case.id} because {sys.exc_info()[0]}')
         pass
+
+    print(f'Detected Entities for {case.id}')
 
 def get_entities_csv_filename(args):
     return os.path.join(args.output, 'entities.csv')
