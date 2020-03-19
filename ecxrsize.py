@@ -2,16 +2,18 @@ import argparse
 import csv
 import json
 import os
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 import boto3
+import pandas as pd
 
 import cv2
 import matplotlib.pyplot as plt
 import PIL
 import pydicom as dicom
+
 
 @dataclass
 class Case:
@@ -30,6 +32,7 @@ def main():
     parser.add_argument('--output', help='output', default='output')
 
     parser.add_argument('--csv', help='generate master csv', action='store_true')
+    parser.add_argument('--merge', help='merge label csv(s)', action='store_true')
 
     parser.add_argument('--comprehend', help='run Comprehend Medical on reports', action='store_true')
 
@@ -60,6 +63,9 @@ def main():
     
     if args.csv:
         write_cases_csv(cases, args)
+    
+    if args.merge:
+        merge_csvs(args)
 
 def parse_source_folders(args) -> List[Case]:
     cases = []
@@ -234,8 +240,7 @@ def write_labels_for_all_cases(cases: List[Case], output_folder: str):
             possible_diagnoses_set.add(label)
     possible_diagnoses = list(possible_diagnoses_set)
     
-    LABELS_FILENAME = 'labels.csv'
-    labels_csv_filename = os.path.join(output_folder, LABELS_FILENAME)
+    labels_csv_filename = get_labels_csv_filename(output_folder)
     with open(labels_csv_filename, 'w') as labels_csv_file:
         writer = csv.writer(labels_csv_file)
         writer.writerow(['ID'] + possible_diagnoses)
@@ -248,6 +253,9 @@ def write_labels_for_all_cases(cases: List[Case], output_folder: str):
 
             writer.writerow(row)
 
+def get_labels_csv_filename(output_folder: str):
+    return os.path.join(output_folder, 'labels.csv')
+
 def read_file(filename: str):
     file = open(filename, 'r')
     text = file.read()
@@ -255,10 +263,8 @@ def read_file(filename: str):
     return text
 
 def write_cases_csv(cases: Case, args):
-    csv_filename = os.path.join(args.output, 'master.csv')
+    csv_filename = get_cases_csv_filename(args)
     file_already_exists = os.path.exists(csv_filename)
-
-
     
     with open(csv_filename, 'a') as labels_csv_file:
         writer = csv.writer(labels_csv_file)
@@ -276,7 +282,18 @@ def write_cases_csv(cases: Case, args):
                 args.source_folder,
                 case.output_directory
             ])
-            
+
+def get_cases_csv_filename(args):
+    return os.path.join(args.output, 'cases.csv')
+
+def get_master_csv_filename(args):
+    return os.path.join(args.output, 'master.csv')
+
+def merge_csvs(args):
+    cases_df = pd.read_csv(get_cases_csv_filename(args))
+    labels_df = pd.read_csv(get_labels_csv_filename(args.output))
+    merged_df = pd.merge(cases_df, labels_df, how='outer', on='ID')
+    merged_df.to_csv(get_master_csv_filename(args))
 
 if __name__ == '__main__':
     main()
