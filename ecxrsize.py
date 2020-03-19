@@ -2,6 +2,7 @@ import argparse
 import csv
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -159,12 +160,15 @@ def detect_entities_for_cases(cases: List[Case], args):
 def detect_entities_for_case(case: Case, args):
     client = boto3.client(service_name='comprehendmedical')
 
-    result = client.detect_entities(Text=case.report_text)
-
-    output_filename = get_comprehend_medical_filename(case, args)
-    file = open(output_filename, 'w')
-    file.write(json.dumps(result, indent=2))
-    file.close()
+    try:
+        result = client.detect_entities(Text=case.report_text)
+        output_filename = get_comprehend_medical_filename(case, args)
+        file = open(output_filename, 'w')
+        file.write(json.dumps(result, indent=2))
+        file.close()
+    except:
+        print(f'Failed to detect_entities for {case.id} because {sys.exc_info()[0]}')
+        pass
 
 def get_entities_csv_filename(args):
     return os.path.join(args.output, 'entities.csv')
