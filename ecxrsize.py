@@ -63,6 +63,9 @@ def parse_source_folders(args) -> List[Case]:
         dicom_files = []
         report_file = ""
         case_folder = os.path.join(args.source_folder, case_id)
+        if os.path.isdir(case_folder) is False:
+            continue
+
         for file in os.listdir(case_folder):
             full_file_path = os.path.join(case_folder, file)
             if file.endswith('.txt'):
