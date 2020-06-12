@@ -45,6 +45,8 @@ def main():
 
     parser.add_argument('--entities', help='generate csv file with found entities', action='store_true')
 
+    parser.add_argument('--tags', help='generate csv file with desired DICOM tags', action='store_true')
+
     parser.add_argument('--labels', help='generate labels for cases (comprehend must have already been run)', action='store_true')
 
     parser.add_argument('--images', help='convert dicoms to images', action='store_true')
@@ -68,6 +70,9 @@ def main():
     if args.images:
         convert_dicoms_for_cases(cases, args)
     
+    if args.tags:
+        extract_dicom_tags_for_cases(cases, args)
+
     if args.csv:
         write_cases_csv(cases, args)
     
@@ -138,6 +143,44 @@ def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[in
 
     resized_img = cv2.resize(image_2d_scaled, output_dimensions)
     cv2.imwrite(full_image_path, resized_img)
+
+TAGS = ["ViewPosition"]
+
+def extract_dicom_tags_for_cases(cases: List[Case], args):
+    csv_filename = os.path.join(args.output, 'tags.csv')
+    file_already_exists = os.path.exists(csv_filename)
+
+    HEADER = [
+        "Case ID",
+        "Image ID",
+    ] + TAGS
+
+    with open(csv_filename, 'a') as labels_csv_file:
+        writer = csv.writer(labels_csv_file)
+        if file_already_exists is False:
+            writer.writerow(HEADER)
+        for case in cases:
+            for dicom_file in case.dicom_files:
+                filename = os.path.basename(dicom_file)
+                image_id = os.path.splitext(filename)[0]
+                case_tags = extract_dicom_tags_for_case(dicom_file)
+
+                row = [
+                    case.id,
+                    image_id
+                ] + case_tags
+                writer.writerow(row)
+
+            print(f'Extracted Tags for {case.id}')
+
+def extract_dicom_tags_for_case(dicom_file: str):
+    ds = dicom.dcmread(dicom_file)
+
+    dicom_tags = []
+    for tag in TAGS:
+        dicom_tags.append(ds.get(tag))
+
+    return dicom_tags
 
 def get_comprehend_medical_filename(case: Case, args):
     COMPREHEND_MEDICAL_OUTPUT_FILENAME = 'comprehendmedical.json'
