@@ -67,11 +67,8 @@ def main():
     if args.labels:
         generate_labels_for_cases(cases, args)
 
-    if args.images:
+    if args.images or args.tags:
         convert_dicoms_for_cases(cases, args)
-    
-    if args.tags:
-        extract_dicom_tags_for_cases(cases, args)
 
     if args.csv:
         write_cases_csv(cases, args)
@@ -108,6 +105,20 @@ def parse_source_folders(args) -> List[Case]:
     return cases
 
 def convert_dicoms_for_cases(cases: List[Case], args):
+    if args.tags:
+        csv_filename = os.path.join(args.output, 'tags.csv')
+        file_already_exists = os.path.exists(csv_filename)
+
+        HEADER = [
+            "Case ID",
+            "Image ID",
+        ] + TAGS
+
+        with open(csv_filename, 'a') as tags_csv_file:
+            writer = csv.writer(tags_csv_file)
+            if file_already_exists is False:
+                writer.writerow(HEADER)
+
     image_start_time = datetime.now()
 
     with Pool(args.p) as pool:
@@ -115,9 +126,28 @@ def convert_dicoms_for_cases(cases: List[Case], args):
 
     print(f'Converting {len(cases)} cases took {datetime.now() - image_start_time}')
 
+TAGS = ["ViewPosition", "PhotometricInterpretation"]
+
 def convert_dicoms_for_case(case: Case, args):
     for dicom_file in case.dicom_files:
-        convert_dicom(dicom_file, output_path=case.output_directory, output_dimensions=(args.width, args.height), ext=args.ext)
+        filename = os.path.basename(dicom_file)
+        ds = dicom.dcmread(dicom_file)
+        if args.images:
+            convert_dicom(dicom_file, output_path=case.output_directory, output_dimensions=(args.width, args.height), ext=args.ext)
+        if args.tags:
+            filename = os.path.basename(dicom_file)
+            image_id = os.path.splitext(filename)[0]
+            case_tags = extract_dicom_tags_for_case(ds)
+
+            row = [
+                case.id,
+                image_id
+            ] + case_tags
+            csv_filename = os.path.join(args.output, 'tags.csv')
+            with open(csv_filename, 'a') as tags_csv_file:
+                writer = csv.writer(tags_csv_file)
+                writer.writerow(row)
+
     print(f'Converted {case.id}')
 
 def get_case_output_directory(id: str, args):
@@ -139,7 +169,6 @@ def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[in
     image_2d_scaled = np.maximum(image_2d,0) / image_2d.max()
 
     photometric_interpretation = ds.get("PhotometricInterpretation")
-    print(photometric_interpretation)
     if photometric_interpretation == "MONOCHROME1":
         image_2d_scaled = 1 - image_2d_scaled
 
@@ -151,38 +180,7 @@ def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[in
     resized_img = cv2.resize(image_2d_scaled, output_dimensions)
     cv2.imwrite(full_image_path, resized_img)
 
-TAGS = ["ViewPosition"]
-
-def extract_dicom_tags_for_cases(cases: List[Case], args):
-    csv_filename = os.path.join(args.output, 'tags.csv')
-    file_already_exists = os.path.exists(csv_filename)
-
-    HEADER = [
-        "Case ID",
-        "Image ID",
-    ] + TAGS
-
-    with open(csv_filename, 'a') as labels_csv_file:
-        writer = csv.writer(labels_csv_file)
-        if file_already_exists is False:
-            writer.writerow(HEADER)
-        for case in cases:
-            for dicom_file in case.dicom_files:
-                filename = os.path.basename(dicom_file)
-                image_id = os.path.splitext(filename)[0]
-                case_tags = extract_dicom_tags_for_case(dicom_file)
-
-                row = [
-                    case.id,
-                    image_id
-                ] + case_tags
-                writer.writerow(row)
-
-            print(f'Extracted Tags for {case.id}')
-
-def extract_dicom_tags_for_case(dicom_file: str):
-    ds = dicom.dcmread(dicom_file)
-
+def extract_dicom_tags_for_case(ds):
     dicom_tags = []
     for tag in TAGS:
         dicom_tags.append(ds.get(tag))
