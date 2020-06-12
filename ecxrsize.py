@@ -136,7 +136,14 @@ def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[in
     image_2d = ds.pixel_array.astype(float)
 
     # Rescaling grey scale between 0-255
-    image_2d_scaled = (1 -(np.maximum(image_2d,0) / image_2d.max())) * 255.0
+    image_2d_scaled = np.maximum(image_2d,0) / image_2d.max()
+
+    photometric_interpretation = ds.get("PhotometricInterpretation")
+    print(photometric_interpretation)
+    if photometric_interpretation == "MONOCHROME1":
+        image_2d_scaled = 1 - image_2d_scaled
+
+    image_2d_scaled = image_2d_scaled * 255.0
 
     # Convert to uint
     image_2d_scaled = np.uint8(image_2d_scaled)
