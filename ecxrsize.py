@@ -126,12 +126,17 @@ def convert_dicoms_for_cases(cases: List[Case], args):
 
     print(f'Converting {len(cases)} cases took {datetime.now() - image_start_time}')
 
-TAGS = ["ViewPosition", "PhotometricInterpretation"]
+TAGS = ["ViewPosition", "PhotometricInterpretation", "SeriesDescription", "ImageComments", "AcquisitionDeviceProcessingDescription"]
 
 def convert_dicoms_for_case(case: Case, args):
     for dicom_file in case.dicom_files:
         filename = os.path.basename(dicom_file)
-        ds = dicom.dcmread(dicom_file)
+
+        stop_before_pixels = True
+        if args.images == True:
+            stop_before_pixels = False
+
+        ds = dicom.dcmread(dicom_file, stop_before_pixels=stop_before_pixels)
         if args.images:
             convert_dicom(dicom_file, output_path=case.output_directory, output_dimensions=(args.width, args.height), ext=args.ext)
         if args.tags:
