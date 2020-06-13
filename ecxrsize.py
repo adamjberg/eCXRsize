@@ -170,20 +170,26 @@ def convert_dicom(dicom_file: str, output_path: str, output_dimensions: Tuple[in
     # Convert to float to avoid overflow or underflow losses.
     image_2d = ds.pixel_array.astype(float)
 
-    # Rescaling grey scale between 0-255
     image_2d_scaled = np.maximum(image_2d,0) / image_2d.max()
 
     photometric_interpretation = ds.get("PhotometricInterpretation")
     if photometric_interpretation == "MONOCHROME1":
         image_2d_scaled = 1 - image_2d_scaled
 
-    image_2d_scaled = image_2d_scaled * 255.0
-
-    # Convert to uint
-    image_2d_scaled = np.uint8(image_2d_scaled)
+    encode_param = []
+    if ext == "jpg" or ext == "jpeg":
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 100]
+        image_2d_scaled = image_2d_scaled * 255.0
+        image_2d_scaled = np.uint8(image_2d_scaled)
+    elif ext == "png":
+        encode_param = [int(cv2.IMWRITE_PNG_COMPRESSION), 0]
+        image_2d_scaled = image_2d_scaled * 65536.0
+        image_2d_scaled = np.uint16(image_2d_scaled)
+    else:
+        raise("Unexpected image extension")
 
     resized_img = cv2.resize(image_2d_scaled, output_dimensions)
-    cv2.imwrite(full_image_path, resized_img)
+    cv2.imwrite(full_image_path, resized_img, encode_param)
 
 def extract_dicom_tags_for_case(ds):
     dicom_tags = []
