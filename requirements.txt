@@ -6,7 +6,7 @@ docutils==0.15.2
 jmespath==0.10.0
 kiwisolver==1.2.0
 matplotlib==3.2.1
-numpy==1.18.5
+numpy==1.22.0
 opencv-python==4.2.0.34
 pandas==1.0.4
 Pillow==7.1.2
